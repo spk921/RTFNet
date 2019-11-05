@@ -1,0 +1,5 @@
+weights
+*.swp
+dataset
+__pycache__
+runs
