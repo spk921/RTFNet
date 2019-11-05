@@ -3,8 +3,8 @@
 # Email: sun.yuxiang@outlook.com
 
 import torch
-import torch.nn as nn 
-import torchvision.models as models 
+import torch.nn as nn
+import torchvision.models as models
 
 class RTFNet(nn.Module):
 
@@ -35,8 +35,8 @@ class RTFNet(nn.Module):
             self.inplanes = 2048
 
         ########  Thermal ENCODER  ########
- 
-        self.encoder_thermal_conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False) 
+
+        self.encoder_thermal_conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.encoder_thermal_conv1.weight.data = torch.unsqueeze(torch.mean(resnet_raw_model1.conv1.weight.data, dim=1), dim=1)
         self.encoder_thermal_bn1 = resnet_raw_model1.bn1
         self.encoder_thermal_relu = resnet_raw_model1.relu
@@ -47,7 +47,7 @@ class RTFNet(nn.Module):
         self.encoder_thermal_layer4 = resnet_raw_model1.layer4
 
         ########  RGB ENCODER  ########
- 
+
         self.encoder_rgb_conv1 = resnet_raw_model2.conv1
         self.encoder_rgb_bn1 = resnet_raw_model2.bn1
         self.encoder_rgb_relu = resnet_raw_model2.relu
@@ -64,7 +64,7 @@ class RTFNet(nn.Module):
         self.deconv3 = self._make_transpose_layer(TransBottleneck, self.inplanes//2, 2, stride=2) # using // for python 3.6
         self.deconv4 = self._make_transpose_layer(TransBottleneck, self.inplanes//2, 2, stride=2) # using // for python 3.6
         self.deconv5 = self._make_transpose_layer(TransBottleneck, n_class, 2, stride=2)
- 
+
     def _make_transpose_layer(self, block, planes, blocks, stride=1):
 
         upsample = None
@@ -72,13 +72,13 @@ class RTFNet(nn.Module):
             upsample = nn.Sequential(
                 nn.ConvTranspose2d(self.inplanes, planes, kernel_size=2, stride=stride, padding=0, bias=False),
                 nn.BatchNorm2d(planes),
-            ) 
+            )
         elif self.inplanes != planes:
             upsample = nn.Sequential(
                 nn.Conv2d(self.inplanes, planes, kernel_size=1, stride=stride, padding=0, bias=False),
                 nn.BatchNorm2d(planes),
-            ) 
- 
+            )
+
         for m in upsample.modules():
             if isinstance(m, nn.ConvTranspose2d):
                 nn.init.xavier_uniform_(m.weight.data)
@@ -95,7 +95,7 @@ class RTFNet(nn.Module):
         self.inplanes = planes
 
         return nn.Sequential(*layers)
- 
+
     def forward(self, input):
 
         rgb = input[:,:3]
@@ -144,7 +144,7 @@ class RTFNet(nn.Module):
         rgb = rgb + thermal
 
         ######################################################################
- 
+
         rgb = self.encoder_rgb_layer2(rgb)
         if vobose: print("rgb.size() after layer2: ", rgb.size()) # (60, 80)
         thermal = self.encoder_thermal_layer2(thermal)
@@ -186,26 +186,26 @@ class RTFNet(nn.Module):
         if vobose: print("fuse after deconv5: ", fuse.size()) # (480, 640)
 
         return fuse
-  
+
 class TransBottleneck(nn.Module):
 
     def __init__(self, inplanes, planes, stride=1, upsample=None):
         super(TransBottleneck, self).__init__()
-        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)  
+        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
-        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)  
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1, bias=False)
         self.bn2 = nn.BatchNorm2d(planes)
 
         if upsample is not None and stride != 1:
-            self.conv3 = nn.ConvTranspose2d(planes, planes, kernel_size=2, stride=stride, padding=0, bias=False)  
+            self.conv3 = nn.ConvTranspose2d(planes, planes, kernel_size=2, stride=stride, padding=0, bias=False)
         else:
-            self.conv3 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)  
+            self.conv3 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
 
         self.bn3 = nn.BatchNorm2d(planes)
         self.relu = nn.ReLU(inplace=True)
         self.upsample = upsample
         self.stride = stride
- 
+
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.xavier_uniform_(m.weight.data)
@@ -244,7 +244,7 @@ def unit_test():
     rtf_net = RTFNet(9).cuda(0)
     input = torch.cat((rgb, thermal), dim=1)
     rtf_net(input)
-    #print('The model: ', rtf_net.modules)
+    print('The model: ', rtf_net.modules)
 
 if __name__ == '__main__':
     unit_test()

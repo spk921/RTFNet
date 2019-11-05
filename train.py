@@ -20,8 +20,8 @@ from tensorboardX import SummaryWriter
 from model import RTFNet
 
 # config
-n_class   = 9
-data_dir  = './dataset/'
+n_class   = 2
+data_dir  = '/mnt/4TWD/ECCV20/ground/step2_all'
 weight_dir = './weights/'
 
 augmentation_methods = [
@@ -44,13 +44,22 @@ def train(epo, model, train_loader, optimizer):
     for it, (images, labels, names) in enumerate(train_loader):
         images = Variable(images).cuda(args.gpu)
         labels = Variable(labels).cuda(args.gpu)
+
         if args.gpu >= 0:
             images = images.cuda(args.gpu)
             labels = labels.cuda(args.gpu)
 
         optimizer.zero_grad()
-        logits = model(images) 
-        loss = F.cross_entropy(logits, labels) 
+
+        #Dummy input
+        #num_minibatch = 2
+        #rgb = torch.randn(num_minibatch, 3, 480, 640).cuda(0)
+        #thermal = torch.randn(num_minibatch, 1, 480, 640).cuda(0)
+        #images = torch.cat((rgb, thermal), dim=1)
+        #labels = torch.ones([num_minibatch, 480, 640],dtype=torch.long).cuda(0)
+
+        logits = model(images)
+        loss = F.cross_entropy(logits, labels)
         loss.backward()
         optimizer.step()
 
@@ -94,16 +103,16 @@ def validation(epo, model, val_loader):
                 images = images.cuda(args.gpu)
                 labels = labels.cuda(args.gpu)
 
-            logits = model(images) 
+            logits = model(images)
             loss = F.cross_entropy(logits, labels)
 
             # time.time() returns the current time
             print('|- %s, epo %s/%s, val iter %s/%s, %.2f img/sec loss: %.4f' \
                     % (args.model_name, epo, args.epoch_max, it+1, val_loader.n_iter, (it+1)*args.batch_size/(time.time()-start_t), float(loss)))
 
-            # for tensorboard 
+            # for tensorboard
             total_it = epo * val_loader.n_iter + it
- 
+
             if total_it % 1 == 0:
                 writer.add_scalar('Validation/loss', loss, total_it)
 
@@ -155,9 +164,9 @@ def testing(epo, model, test_loader):
 
 def main():
 
-    train_dataset = MF_dataset(data_dir, 'train', have_label=True, transform=augmentation_methods)
-    val_dataset  = MF_dataset(data_dir, 'val', have_label=True) 
-    test_dataset = MF_dataset(data_dir, 'test', have_label=True)
+    train_dataset = MF_dataset(data_dir, 'train_toy', have_label=True, transform=augmentation_methods)
+    val_dataset  = MF_dataset(data_dir, 'test_toy', have_label=True)
+    test_dataset = MF_dataset(data_dir, 'test_toy', have_label=True)
 
     train_loader  = DataLoader(
         dataset     = train_dataset,
@@ -196,10 +205,11 @@ def main():
 
         train(epo, model, train_loader, optimizer)
         validation(epo, model, val_loader)
- 
-        checkpoint_model_file = os.path.join(weight_dir, str(epo)+'.pth')
-        print('|- saving check point %s: ' %checkpoint_model_file)
-        torch.save(model.state_dict(), checkpoint_model_file)
+
+        if epo % 20 == 0:
+          checkpoint_model_file = os.path.join(weight_dir, str(epo)+'.pth')
+          print('|- saving check point %s: ' %checkpoint_model_file)
+          torch.save(model.state_dict(), checkpoint_model_file)
 
         np.set_printoptions(precision=8, threshold=np.inf, linewidth=np.inf, suppress=True, floatmode='fixed')
         testing_results = testing(epo, model, test_loader)
@@ -207,23 +217,23 @@ def main():
             testing_result_appender.write(str(epo) + ',' + str(testing_results[0]) + ',' + str(testing_results[1]) + ',' + str(testing_results[2]))
             testing_result_appender.write('\n')
         print('|- saving testing results.\n')
- 
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Train with pytorch')
-    ############################################################################################# 
+    #############################################################################################
     parser.add_argument('--model_name',  '-M',  type=str, default='RTFNet')
     #batch_size: RTFNet-152: 2; RTFNet-101: 2; RTFNet-50: 3; RTFNet-34: 10; RTFNet-18: 15;
-    parser.add_argument('--batch_size',  '-B',  type=int, default=2) 
+    parser.add_argument('--batch_size',  '-B',  type=int, default=2)
     parser.add_argument('--lr_start',  '-LS',  type=float, default=0.01)
     parser.add_argument('--gpu',        '-G',  type=int, default=0)
     #############################################################################################
     parser.add_argument('--lr_decay', '-LD', type=float, default=0.95)
-    parser.add_argument('--epoch_max' ,  '-E',  type=int, default=100000) # please stop training mannully 
-    parser.add_argument('--epoch_from',  '-EF', type=int, default=0) 
+    parser.add_argument('--epoch_max' ,  '-E',  type=int, default=100) # please stop training mannully
+    parser.add_argument('--epoch_from',  '-EF', type=int, default=0)
     parser.add_argument('--num_workers', '-j',  type=int, default=8)
     args = parser.parse_args()
- 
+
     torch.cuda.set_device(args.gpu)
     print("\nthe gpu count:", torch.cuda.device_count())
     print("the current used gpu:", torch.cuda.current_device(), '\n')
@@ -233,23 +243,19 @@ if __name__ == '__main__':
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr_start, momentum=0.9, weight_decay=0.0005)
 
     weight_dir = os.path.join(weight_dir, args.model_name)
-    if os.path.exists(weight_dir) is True: 
+    if os.path.exists(weight_dir) is True:
         print('previous weights folder exist, will delete the weights folder')
         shutil.rmtree(weight_dir)
         os.makedirs(weight_dir)
-        os.chmod(weight_dir, stat.S_IRWXO)  # allow the folder created by docker read and written by local machine
     else:
         os.makedirs(weight_dir)
-        os.chmod(weight_dir, stat.S_IRWXO)
 
-    if os.path.exists("runs") is True: 
+    if os.path.exists("runs") is True:
         print('previous runs folder exist, will delete the runs folder')
         shutil.rmtree("runs")
         os.makedirs("runs")
-        os.chmod("runs", stat.S_IRWXO)
     else:
         os.makedirs('runs')
-        os.chmod('runs', stat.S_IRWXO)
 
     # tensorboardX setup
     writer = SummaryWriter('runs')  # default log directory is 'runs'
